@@ -1,6 +1,9 @@
 __author__ = 'Artiom.Casapu'
 
+import sys
 import re
+import FileUtils
+from HashTable import HashTable
 
 token_definition = {
     'IDENTIFICATOR': (r'[a-zA-Z_][a-zA-Z0-9_]*', 1),
@@ -39,14 +42,16 @@ token_definition = {
     'COMMA': (r',', 34),
     'IF': (r'if', 35),
     'WHILE': (r'while', 36),
-    'CONST': (r'const', 37)
+    'CONST': (r'const', 37),
+    'DOT_AND_COMMA' : (r';', 38),
+    'NOT_EQUAL': (r'!=', 39)
 }
 
 keywords = ['IF', 'WHILE', 'STRING_TYPE', 'INTEGER_TYPE', 'DOUBLE_TYPE','CHAR_TYPE', 'FUNC', 'CONST', 'MAIN', 'READ', 'WRITE']
 constants = ['STRING_CONST', 'NUMBER', 'REAL_NUMBER', 'CHAR_CONST']
 
-characters = ['+', '-', '/', '*', '%', '(', ')', '[', ']', '{', '}' ,',']
-ambiguous_characters = ['=', '>', '<']
+characters = ['+', '-', '/', '*', '%', '(', ')', '[', ']', '{', '}' ,',', ';']
+ambiguous_characters = ['=', '>', '<' ,'!']
 separators = [' ','\t','\n']
 
 """
@@ -56,9 +61,9 @@ class Lexer:
 
     def __init__(self, token_definition, text):
         self.token_definition = token_definition
-        self.symbol_table = dict()
+        self.symbol_table = HashTable()
         self.program_structure = []
-        self.parse(text)
+        self.parse_without_regexp(text)
 
     def isident(self, char):
         return  char.isalnum() or (char == '_')
@@ -102,13 +107,10 @@ class Lexer:
             result += [(token, token_type)]
 
             if (token_type in constants) or (token_type == 'IDENTIFICATOR'):
-                if not (self.symbol_table.has_key(token)):
-                    value = len(self.symbol_table) + 1
-                    self.symbol_table[token] = value
-
-                self.program_structure += [(token_definition[token_type][1], self.symbol_table[token])]
-            else:
-                self.program_structure += [(token_definition[token_type][1], 0)]
+                self.add_to_symbol_table(token)
+                self.add_to_fip(token_type, self.symbol_table.get_value(token))
+            elif (token_type != 'SEPARATOR'):
+                self.add_to_fip(token_type, 0)
 
             pos += len(token)
             token, token_type = self.get_token(seq, pos)
@@ -117,6 +119,16 @@ class Lexer:
                 raise Exception('Unrecognized token ' + seq[pos:])
 
         self.parse_result = result
+
+    def add_to_symbol_table(self, token):
+        if not (self.symbol_table.contains_key(token)):
+            value = self.symbol_table.num + 1
+            #self.symbol_table[token] = value
+            self.symbol_table.add_key(token, value)
+
+    def add_to_fip(self, token_type, value):
+        self.program_structure += [(token_definition[token_type][1], value)]
+
 
     def parse_without_regexp(self, text):
         result = []
@@ -129,6 +141,11 @@ class Lexer:
                     i += 1
                 token, token_type = self.get_token(ident, 0)
                 result += [(token, token_type)]
+                if (token_type == 'IDENTIFICATOR'):
+                    self.add_to_symbol_table(token)
+                    self.add_to_fip(token_type, self.symbol_table.get_value(token))
+                else:
+                    self.add_to_fip(token_type, 0)
                 continue
 
             if (text[i].isdigit()):
@@ -146,12 +163,16 @@ class Lexer:
 
                 token, token_type = self.get_token(num, 0)
                 result += [(token, token_type)]
+                if (token_type in constants):
+                    self.add_to_symbol_table(token)
+                    self.add_to_fip(token_type, self.symbol_table.get_value(token))
                 continue
 
             if (text[i] in characters):
                 token, token_type = self.get_token(text[i], 0)
                 result += [(token, token_type)]
                 i += 1
+                self.add_to_fip(token_type, 0)
                 continue
 
             if (text[i] in ambiguous_characters):
@@ -161,8 +182,11 @@ class Lexer:
                     ch += text[i]
                     i += 1
                 else:
+                    if ch == '!':
+                        raise Exception('Unkown token near ' + ch)
                     i += 1
                 token, token_type = self.get_token(ch, 0)
+                self.add_to_fip(token_type, 0)
                 result += [(token, token_type)]
                 continue
 
@@ -187,6 +211,10 @@ class Lexer:
                 else:
                     raise Exception('Unrecognized token at ' + text[i])
 
+                token, token_type = self.get_token(ch, 0)
+                result += [(token, token_type)]
+                self.add_to_symbol_table(token)
+                self.add_to_fip(token_type, self.symbol_table.get_value(token))
                 continue
 
             if (text[i] == '"'):
@@ -200,6 +228,8 @@ class Lexer:
                     i += 1
                 token, token_type = self.get_token(ch, 0)
                 result += [(token, token_type)]
+                self.add_to_symbol_table(token)
+                self.add_to_fip(token_type, self.symbol_table.get_value(token))
                 continue
 
             raise Exception('Unrecognized token at ' + text[i])
@@ -227,8 +257,13 @@ input2 = """
 input3 = """
 """
 
-l = Lexer(token_definition, input1)
-print l.parse_result
-print l.symbol_table
-print l.program_structure
-print l.get_token('main', 0)
+if __name__ == "__main__":
+
+    input_file = sys.argv[1]
+
+    l = Lexer(token_definition, FileUtils.read_file(input_file))
+    #print l.parse_result
+    #print l.symbol_table
+    #print l.program_structure
+    FileUtils.write_symbol_table(l.symbol_table)
+    FileUtils.write_fip(l.program_structure)
