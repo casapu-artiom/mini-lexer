@@ -4,11 +4,13 @@ import sys
 import re
 import FileUtils
 from HashTable import HashTable
+from FiniteStateMachine import State
+from FiniteStateMachine import FSM
 
 token_definition = {
     'IDENTIFICATOR': (r'[a-zA-Z_][a-zA-Z0-9_]*', 1),
     'STRING_CONST': (r'"[a-zA-Z0-9_]*"', 2),
-    'CHAR_CONST': (r'\'[a-zA-Z0-9_ ]*\'', 3),
+    'CHAR_CONST': (r'\'[a-zA-Z0-9_ ]\'', 3),
     'NUMBER': (r'[0-9]+', 4),
     'REAL_NUMBER': (r'[0-9]+\.[0-9]+',5),
     'SEPARATOR': (r'\n| |\t',6),
@@ -20,8 +22,8 @@ token_definition = {
     'MAIN': (r'main', 12),
     'OPEN_ROUND_BRACKET': (r'\(',13),
     'CLOSE_ROUND_BRACKET': (r'\)',14),
-    'SINGLE_QUOTE': (r'\'', 15),
-    'DOUBLE_QUOTE': (r'\"', 16),
+    #'SINGLE_QUOTE': (r'\'', 15),
+    #'DOUBLE_QUOTE': (r'\"', 16),
     'LSQBR': (r'\[', 17),
     'RSQBR': (r'\]', 18),
     'LEFT_CURLY_BRACKET': (r'{', 19),
@@ -55,7 +57,8 @@ ambiguous_characters = ['=', '>', '<' ,'!']
 separators = [' ','\t','\n']
 
 """
-
+Class that accepts as constructor parameters the token definitions (as regular expresions) and the input text
+Has methods that returns the symbol table and the program structure
 """
 class Lexer:
 
@@ -63,7 +66,65 @@ class Lexer:
         self.token_definition = token_definition
         self.symbol_table = HashTable()
         self.program_structure = []
-        self.parse_without_regexp(text)
+
+        self.identificator_fsm = FSM(list('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'))
+
+        self.identificator_fsm.addState(State('WithoutDigits'))
+        self.identificator_fsm.addState(State('WithDigits'))
+
+        self.identificator_fsm.addTransition(r'[a-zA-Z_]',
+            self.identificator_fsm.findState('Root'), self.identificator_fsm.findState('WithoutDigits'))
+        self.identificator_fsm.addTransition(r'[a-zA-Z0-9_]',
+            self.identificator_fsm.findState('WithoutDigits'), self.identificator_fsm.findState('WithDigits'))
+        self.identificator_fsm.addTransition(r'[a-zA-Z0-9_]',
+            self.identificator_fsm.findState('WithDigits'), self.identificator_fsm.findState('WithDigits'))
+
+        self.constanta_integer_fsm = FSM(list('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'))
+
+        self.constanta_integer_fsm.addState(State('Digit'))
+        self.constanta_integer_fsm.addTransition(r'[0-9]',
+            self.constanta_integer_fsm.findState('Root'), self.constanta_integer_fsm.findState('Digit'))
+        self.constanta_integer_fsm.addTransition(r'[0-9]',
+            self.constanta_integer_fsm.findState('Digit'), self.constanta_integer_fsm.findState('Digit'))
+
+        self.constanta_string_fsm = FSM(list('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\'\"'))
+        self.constanta_string_fsm.addState(State('LeftQuote', isfinal=False))
+        self.constanta_string_fsm.addState(State('Character', isfinal=False))
+        self.constanta_string_fsm.addState(State('RightQuote'))
+        self.constanta_string_fsm.addTransition(r'\"',
+            self.constanta_string_fsm.findState('Root'), self.constanta_string_fsm.findState('LeftQuote'))
+        self.constanta_string_fsm.addTransition(r'[a-zA-Z0-9_]',
+            self.constanta_string_fsm.findState('LeftQuote'), self.constanta_string_fsm.findState('Character'))
+        self.constanta_string_fsm.addTransition(r'[a-zA-Z0-9_]',
+            self.constanta_string_fsm.findState('Character'), self.constanta_string_fsm.findState('Character'))
+        self.constanta_string_fsm.addTransition(r'\"',
+            self.constanta_string_fsm.findState('Character'), self.constanta_string_fsm.findState('RightQuote'))
+        self.constanta_string_fsm.addTransition(r'\"',
+            self.constanta_string_fsm.findState('LeftQuote'), self.constanta_string_fsm.findState('RightQuote'))
+
+        self.constanta_char_fsm = FSM(list('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789\'\"'))
+        self.constanta_char_fsm.addState(State('LeftQuote', isfinal=False))
+        self.constanta_char_fsm.addState(State('Character', isfinal=False))
+        self.constanta_char_fsm.addState(State('RightQuote'))
+        self.constanta_char_fsm.addTransition(r'\"',
+            self.constanta_char_fsm.findState('Root'), self.constanta_char_fsm.findState('LeftQuote'))
+        self.constanta_char_fsm.addTransition(r'[a-zA-Z0-9_]',
+            self.constanta_char_fsm.findState('LeftQuote'), self.constanta_char_fsm.findState('Character'))
+        self.constanta_char_fsm.addTransition(r'\"',
+            self.constanta_char_fsm.findState('Character'), self.constanta_char_fsm.findState('RightQuote'))
+
+        self.constanta_double_fsm = FSM(list('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'))
+        self.constanta_double_fsm.addState(State('Dot', isfinal=False))
+        self.constanta_double_fsm.addState(State('Digit'))
+        self.constanta_double_fsm.addTransition(r'[0-9]',
+            self.constanta_double_fsm.findState('Root'), self.constanta_double_fsm.findState('Digit'))
+        self.constanta_double_fsm.addTransition(r'[0-9]',
+            self.constanta_double_fsm.findState('Digit'), self.constanta_double_fsm.findState('Digit'))
+        self.constanta_double_fsm.addTransition(r'.',
+            self.constanta_double_fsm.findState('Digit'), self.constanta_double_fsm.findState('Dot'))
+
+        self.parse(text)
+
 
     def isident(self, char):
         return  char.isalnum() or (char == '_')
@@ -77,6 +138,26 @@ class Lexer:
             m,k = re.match(self.token_definition[key][0], text[pos:]), key
             if m is not None:
                 matches += [(m.group(), k)]
+
+        prefix = self.identificator_fsm.longestPrefix(text[pos:])
+        if (len(prefix) > 0):
+            matches += [(prefix, 'IDENTIFICATOR')]
+
+        prefix = self.constanta_integer_fsm.longestPrefix(text[pos:])
+        if (len(prefix) > 0):
+            matches += [(prefix, 'NUMBER')]
+
+        prefix = self.constanta_double_fsm.longestPrefix(text[pos:])
+        if (len(prefix) > 0):
+            matches += [(prefix, 'REAL_NUMBER')]
+
+        prefix = self.constanta_string_fsm.longestPrefix(text[pos:])
+        if (len(prefix) > 0):
+            matches += [(prefix, 'STRING_CONST')]
+
+        prefix = self.constanta_char_fsm.longestPrefix(text[pos:])
+        if (len(prefix) > 0):
+            matches += [(prefix, 'CHAR_CONST')]
 
         if len(matches) == 0:
             return None, None
@@ -130,111 +211,111 @@ class Lexer:
         self.program_structure += [(token_definition[token_type][1], value)]
 
 
-    def parse_without_regexp(self, text):
-        result = []
-        i = 0
-        while i < len(text):
-            if (text[i].isalpha() or text[i] == '_'):
-                ident = ""
-                while (i < len(text) and self.isident(text[i])):
-                    ident += text[i]
-                    i += 1
-                token, token_type = self.get_token(ident, 0)
-                result += [(token, token_type)]
-                if (token_type == 'IDENTIFICATOR'):
-                    self.add_to_symbol_table(token)
-                    self.add_to_fip(token_type, self.symbol_table.get_value(token))
-                else:
-                    self.add_to_fip(token_type, 0)
-                continue
-
-            if (text[i].isdigit()):
-                num = ""
-                while (i < len(text) and text[i].isdigit()):
-                    num += text[i]
-                    i += 1
-
-                if (i < len(text) and text[i] == '.'):
-                    num += text[i]
-                    i += 1
-                    while (i < len(text) and text[i].isdigit()):
-                        num += text[i]
-                        i += 1
-
-                token, token_type = self.get_token(num, 0)
-                result += [(token, token_type)]
-                if (token_type in constants):
-                    self.add_to_symbol_table(token)
-                    self.add_to_fip(token_type, self.symbol_table.get_value(token))
-                continue
-
-            if (text[i] in characters):
-                token, token_type = self.get_token(text[i], 0)
-                result += [(token, token_type)]
-                i += 1
-                self.add_to_fip(token_type, 0)
-                continue
-
-            if (text[i] in ambiguous_characters):
-                ch = text[i]
-                i += 1
-                if (i < len(text) and text[i] == '='):
-                    ch += text[i]
-                    i += 1
-                else:
-                    if ch == '!':
-                        raise Exception('Unkown token near ' + ch)
-                    i += 1
-                token, token_type = self.get_token(ch, 0)
-                self.add_to_fip(token_type, 0)
-                result += [(token, token_type)]
-                continue
-
-            if (text[i] in separators):
-                token, token_type = self.get_token(text[i], 0)
-                result += [(token, token_type)]
-                i += 1
-                continue
-
-            if (text[i] == "'"):
-                ch = "'"
-                i += 1
-                if (i < len(i) and self.isadmissiblechar(text[i])):
-                    ch += text[i]
-                    i += 1
-                else:
-                    i += 1
-
-                if (i < len(i) and text[i] == "'"):
-                    ch += "'"
-                    i += 1
-                else:
-                    raise Exception('Unrecognized token at ' + text[i])
-
-                token, token_type = self.get_token(ch, 0)
-                result += [(token, token_type)]
-                self.add_to_symbol_table(token)
-                self.add_to_fip(token_type, self.symbol_table.get_value(token))
-                continue
-
-            if (text[i] == '"'):
-                ch = '"'
-                i += 1
-                while (i < len(text) and self.isadmissiblechar(text[i])):
-                    ch += text[i]
-                    i += 1
-                if (i < len(text) and text[i] == '"'):
-                    ch += text[i]
-                    i += 1
-                token, token_type = self.get_token(ch, 0)
-                result += [(token, token_type)]
-                self.add_to_symbol_table(token)
-                self.add_to_fip(token_type, self.symbol_table.get_value(token))
-                continue
-
-            raise Exception('Unrecognized token at ' + text[i])
-
-        self.parse_result = result
+    #def parse_without_regexp(self, text):
+    #    result = []
+    #    i = 0
+    #    while i < len(text):
+    #        if (text[i].isalpha() or text[i] == '_'):
+    #            ident = ""
+    #            while (i < len(text) and self.isident(text[i])):
+    #                ident += text[i]
+    #                i += 1
+    #            token, token_type = self.get_token(ident, 0)
+    #            result += [(token, token_type)]
+    #            if (token_type == 'IDENTIFICATOR'):
+    #                self.add_to_symbol_table(token)
+    #                self.add_to_fip(token_type, self.symbol_table.get_value(token))
+    #            else:
+    #                self.add_to_fip(token_type, 0)
+    #            continue
+    #
+    #        if (text[i].isdigit()):
+    #            num = ""
+    #            while (i < len(text) and text[i].isdigit()):
+    #                num += text[i]
+    #                i += 1
+    #
+    #            if (i < len(text) and text[i] == '.'):
+    #                num += text[i]
+    #                i += 1
+    #                while (i < len(text) and text[i].isdigit()):
+    #                    num += text[i]
+    #                    i += 1
+    #
+    #            token, token_type = self.get_token(num, 0)
+    #            result += [(token, token_type)]
+    #            if (token_type in constants):
+    #                self.add_to_symbol_table(token)
+    #                self.add_to_fip(token_type, self.symbol_table.get_value(token))
+    #            continue
+    #
+    #        if (text[i] in characters):
+    #            token, token_type = self.get_token(text[i], 0)
+    #            result += [(token, token_type)]
+    #            i += 1
+    #            self.add_to_fip(token_type, 0)
+    #            continue
+    #
+    #        if (text[i] in ambiguous_characters):
+    #            ch = text[i]
+    #            i += 1
+    #            if (i < len(text) and text[i] == '='):
+    #                ch += text[i]
+    #                i += 1
+    #            else:
+    #                if ch == '!':
+    #                    raise Exception('Unkown token near ' + ch)
+    #                i += 1
+    #            token, token_type = self.get_token(ch, 0)
+    #            self.add_to_fip(token_type, 0)
+    #            result += [(token, token_type)]
+    #            continue
+    #
+    #        if (text[i] in separators):
+    #            token, token_type = self.get_token(text[i], 0)
+    #            result += [(token, token_type)]
+    #            i += 1
+    #            continue
+    #
+    #        if (text[i] == "'"):
+    #            ch = "'"
+    #            i += 1
+    #            if (i < len(i) and self.isadmissiblechar(text[i])):
+    #                ch += text[i]
+    #                i += 1
+    #            else:
+    #                i += 1
+    #
+    #            if (i < len(i) and text[i] == "'"):
+    #                ch += "'"
+    #                i += 1
+    #            else:
+    #                raise Exception('Unrecognized token at ' + text[i])
+    #
+    #            token, token_type = self.get_token(ch, 0)
+    #            result += [(token, token_type)]
+    #            self.add_to_symbol_table(token)
+    #            self.add_to_fip(token_type, self.symbol_table.get_value(token))
+    #            continue
+    #
+    #        if (text[i] == '"'):
+    #            ch = '"'
+    #            i += 1
+    #            while (i < len(text) and self.isadmissiblechar(text[i])):
+    #                ch += text[i]
+    #                i += 1
+    #            if (i < len(text) and text[i] == '"'):
+    #                ch += text[i]
+    #                i += 1
+    #            token, token_type = self.get_token(ch, 0)
+    #            result += [(token, token_type)]
+    #            self.add_to_symbol_table(token)
+    #            self.add_to_fip(token_type, self.symbol_table.get_value(token))
+    #            continue
+    #
+    #        raise Exception('Unrecognized token at ' + text[i])
+    #
+    #    self.parse_result = result
 
     def isadmissiblechar(self, ch):
         return ch.isalpha() or ch.isdigit() or ch == ' ' or ch == '_'
@@ -262,6 +343,7 @@ if __name__ == "__main__":
     input_file = sys.argv[1]
 
     l = Lexer(token_definition, FileUtils.read_file(input_file))
+    #l = Lexer(token_definition, input1)
     #print l.parse_result
     #print l.symbol_table
     #print l.program_structure

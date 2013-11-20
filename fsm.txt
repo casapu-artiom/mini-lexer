@@ -1,0 +1,21 @@
+Alphabet:
+abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789
+States: #First one is the starting state, states have an implicit Root state
+Letter
+Digit
+Underscore
+Transitions:
+Root->Letter [a-zA-Z]
+Root->Underscore _
+Letter->Letter [a-zA-Z]
+Letter->Underscore _
+Letter->Digit [0-9]
+Digit->Digit [0-9]
+Digit->Letter [a-zA-Z]
+Digit->Underscore _
+Underscore->Digit [0-9]
+Underscore->Letter [a-zA-Z]
+Underscore->Underscore _
+Final states:
+Letter
+Digit

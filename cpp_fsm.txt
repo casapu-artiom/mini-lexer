@@ -1,0 +1,28 @@
+Alphabet:
+0123456789xLU
+States: #First one is the starting state, states have an implicit Root state
+Zero
+Digit
+NonZeroDigit
+Hexa
+Long
+Unsigned
+Transitions:
+Root->Zero 0
+Root->NonZeroDigit [1-9]
+Zero->Digit [0-9]
+Zero->Hexa x
+Hexa->Digit [0-9]
+Digit->Digit [0-9]
+Digit->Long L
+Digit->Unsigned U
+NonZeroDigit->Digit [0-9]
+NonZeroDigit->Long L
+NonZeroDigit->Unsigned U
+Unsigned->Long L
+Final states:
+Digit
+Long
+Unsigned
+Zero
+NonZeroDigit
