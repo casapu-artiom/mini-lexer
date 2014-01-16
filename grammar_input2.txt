@@ -1,0 +1,12 @@
+func main ( ) {
+    integer id ;
+    id = constant ;
+    if ( id == constant ) {
+        id = constant * id ;
+        write ( id ) ;
+        read ( id ) ;
+        if ( constant == constant ) {
+
+        }
+    }
+}

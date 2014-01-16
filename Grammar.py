@@ -1,5 +1,7 @@
 __author__ = 'artiom'
 
+from FileUtils import read_file
+
 class Rule:
 
     def __init__(self, lhs, rhs):
@@ -54,7 +56,7 @@ class Grammar:
         if (not symbols):
             return set([])
 
-        print '#', symbols
+        #print '#', symbols
         if (self.first_cache.has_key(tuple(symbols))):
             return self.first_cache[tuple(symbols)]
 
@@ -384,20 +386,25 @@ class Parser:
 
 
 if __name__ == "__main__":
-    grammar_string = """
-    E -> E + T | T
-    T -> T * F | F
-    F -> ( E ) | id
-    """
+    #grammar_string = """
+    #E -> E + T | T
+    #T -> T * F | F
+    #F -> ( E ) | id
+    #"""
+    #
+    #grammar_string_2 = """
+    #E -> T E'
+    #E' -> + T E' | #
+    #T -> F T'
+    #T' -> * F T' | #
+    #F -> ( E ) | id
+    #"""
 
-    grammar_string_2 = """
-    E -> T E'
-    E' -> + T E' | #
-    T -> F T'
-    T' -> * F T' | #
-    F -> ( E ) | id
-    """
-    grammar = Grammar(grammar_string, 'E')
+
+    grammar_string = read_file('grammar2.txt')
+    input_string = read_file('grammar_input2.txt')
+
+    grammar = Grammar(grammar_string, 'PROGRAM')
 
     #print grammar.terminal_symbols
     #print grammar.symbols
@@ -415,6 +422,6 @@ if __name__ == "__main__":
     #print parser.goto_table
 
 
-    #print parser.try_parse(['(','id', '+', 'id', ')', '+', 'id'])
-    tree = parser.construct_parse_tree(['(','id', '+', '(','id',')', ')', '+', 'id'])
+    #print parser.try_parse(input_string.split())
+    tree = parser.construct_parse_tree(input_string.split())
     tree.print_tree()
