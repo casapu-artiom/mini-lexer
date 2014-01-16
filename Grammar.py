@@ -160,8 +160,16 @@ class Grammar:
         return result
 
 class ParseTree:
-    def __str__(self):
-        pass
+
+    def __init__(self, data, *args):
+        self.children = args
+        self.data = data
+
+    def print_tree(self, ident=0):
+        print ' ' * ident, self.data
+        if self.children:
+            for child in self.children:
+                child.print_tree(ident+4)
 
 class Parser:
 
@@ -328,8 +336,51 @@ class Parser:
                 print 'ERROR'
                 return
 
-    def construct_parse_tree(self):
-        pass
+    def construct_parse_tree(self, symbols):
+        symbols.append('$')
+        stack = [(0, None)]
+
+        k = 0
+        a = symbols[k]
+
+        while True:
+            s = stack[-1][0]
+
+            if (not self.action_table.has_key(s)):
+                print "ERROR"
+                return None
+
+            if (not self.action_table[s].has_key(a)):
+                print 'ERROR'
+                return None
+
+            if (self.action_table[s][a][0] == 's'):
+                stack.append((self.action_table[s][a][1], ParseTree(a)))
+                k = k + 1
+                if (k >= len(symbols)):
+                    print 'ERROR'
+                    return None
+                a = symbols[k]
+
+            elif (self.action_table[s][a][0] == 'r'):
+                rule = self.action_table[s][a][1]
+                nodes = []
+                for x in range(len(rule.rhs)):
+                    nodes.append(stack[-1][1])
+                    stack.pop()
+                t = stack[-1][0]
+                nodes = list(reversed(nodes))
+                stack.append((self.goto_table[t][rule.lhs], ParseTree(rule, *nodes)))
+                print rule
+
+            elif (self.action_table[s][a][0] == 'accept'):
+                print 'ACCEPTED'
+                return stack[-1][1]
+
+            else:
+                print 'ERROR'
+                return None
+
 
 
 if __name__ == "__main__":
@@ -364,4 +415,6 @@ if __name__ == "__main__":
     #print parser.goto_table
 
 
-    print parser.try_parse(['(','id', '+', 'id', ')', '+', 'id'])
+    #print parser.try_parse(['(','id', '+', 'id', ')', '+', 'id'])
+    tree = parser.construct_parse_tree(['(','id', '+', '(','id',')', ')', '+', 'id'])
+    tree.print_tree()
