@@ -210,4 +210,5 @@ if __name__ == "__main__":
     #print fsm.accepts('0a')
 
     fsm = read_state_definition('cpp_fsm.txt')
+    #fsm = read_state_definition()
     show_main_menu(fsm)
