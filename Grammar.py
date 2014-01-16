@@ -36,9 +36,9 @@ class Grammar:
         self.symbols = set([])
         self.terminal_symbols = set([])
         self.rules = self.extract_rules(grammar_string)
-        self.start = start_symbol# + "'"
-        #self.rules[self.start] = [Rule(self.start, [start_symbol])]
-        #self.symbols.add(self.start)
+        self.start = start_symbol + "'"
+        self.rules[self.start] = [Rule(self.start, [start_symbol])]
+        self.symbols.add(self.start)
         self.first_cache = {}
         self.follow_cache = {}
 
@@ -118,13 +118,13 @@ class Grammar:
                             if ('#' in tmp):
                                 result |= (tmp - {'#'})
                                 if (not visited.get(rule.lhs, False)):
-                                    tmp = self.follow(rule.lhs)
+                                    tmp = self.follow(rule.lhs, visited)
                                     result |= tmp
                             else:
                                 result |= tmp
                     if (rule.rhs[-1] == symbol):
                         if (not visited.get(rule.lhs, False)):
-                            result |= self.follow(rule.lhs)
+                            result |= self.follow(rule.lhs, visited)
 
         return result
 
@@ -165,7 +165,7 @@ class ParseTree:
 
 class Parser:
 
-    def closure(self, I, grammar):
+    def closure(self, I):
         J = set()
 
         for lritem in I:
@@ -179,6 +179,9 @@ class Parser:
 
             for rule,idx in J:
                 newJ.add((rule, idx))
+
+                if (idx >= len(rule.rhs)):
+                    continue
 
                 if (not grammar.rules.has_key(rule.rhs[idx])):
                     continue
@@ -201,16 +204,16 @@ class Parser:
             if rule.rhs[idx] == x:
                 J.add((rule, idx+1))
 
-        return J
+        return self.closure(J)
 
-    def get_items(self, grammar):
+    def get_items(self):
         if (grammar.start not in grammar.rules):
             return set()
 
         start = (grammar.rules[grammar.start][0], 0)
         first_set = set()
         first_set.add(start)
-        result = [self.closure(first_set, grammar)]
+        result = [self.closure(first_set)]
 
         cont = True
         while cont:
@@ -227,7 +230,8 @@ class Parser:
 
     def __init__(self, grammar):
 
-        self.items = self.get_items(grammar)
+        self.grammar = grammar
+        self.items = self.get_items()
 
         self.goto_table = {}
         self.action_table = {}
@@ -241,36 +245,34 @@ class Parser:
                     if (idx >= len(item.rhs)):
                         continue
                     if (item.rhs[idx] == x):
-                        found = True
+                        tmp = self.goto(self.items[i], x)
+                        for j in range(len(self.items)):
+                            if tmp == self.items[j]:
+                                #self.action_table.get(i, dict()).get(x, "")
+                                if (not self.action_table.has_key(i)):
+                                    self.action_table[i] = dict()
 
-                if (found):
-                    tmp = self.goto(self.items[i], x)
-                    for j in range(len(self.items)):
-                        if (tmp == self.items[j]) and (i != j):
-                            #self.action_table.get(i, dict()).get(x, "")
-                            if (not self.action_table.has_key(i)):
-                                self.action_table[i] = dict()
-
-                            self.action_table[i][x] = "s" + str(j)
+                                self.action_table[i][x] = ("s", j)
 
             for item, idx in self.items[i]:
+
+                if (grammar.rules[grammar.start][0] == item and idx == len(item.rhs)):
+                    if (not self.action_table.has_key(i)):
+                        self.action_table[i] = dict()
+
+                    self.action_table[i]['$'] = ['accept']
+
                 if item.lhs == grammar.start: continue
 
                 if idx == len(item.rhs):
                     if (not self.action_table.has_key(i)):
-                        self.action_table[i] = {}
+                        self.action_table[i] = dict()
 
-                    tmp = grammar.follow(item.lhs)
+                    tmp = grammar.follow(item.lhs, dict())
 
                     for a in tmp:
                         if (grammar.rules.has_key(item.lhs)):
-                            self.action_table[i][a] = "r" + grammar.rules[item.lhs].indexof(item)
-
-                if (grammar.rules[grammar.start][0] == item):
-                    if (not self.action_table.has_key(i)):
-                        self.action_table[i] = {}
-
-                    self.action_table[i]['$'] = 'accept'
+                            self.action_table[i][a] = ("r", item)
 
             for x in grammar.symbols:
                 if (x in grammar.terminal_symbols): continue
@@ -284,6 +286,47 @@ class Parser:
 
                         self.goto_table[i][x] = j
 
+    def try_parse(self, list):
+        list.append('$')
+        stack = [0]
+
+        k = 0
+        a = list[k]
+
+        while True:
+            s = stack[-1]
+
+            if (not self.action_table.has_key(s)):
+                print "ERROR"
+                return
+
+            if (not self.action_table[s].has_key(a)):
+                print 'ERROR'
+                return
+
+            if (self.action_table[s][a][0] == 's'):
+                stack.append(self.action_table[s][a][1])
+                k = k + 1
+                if (k >= len(list)):
+                    print 'ERROR'
+                    return
+                a = list[k]
+
+            elif (self.action_table[s][a][0] == 'r'):
+                rule = self.action_table[s][a][1]
+                for x in range(len(rule.rhs)):
+                    stack.pop()
+                t = stack[-1]
+                stack.append(self.goto_table[t][rule.lhs])
+                print rule
+
+            elif (self.action_table[s][a][0] == 'accept'):
+                print 'ACCEPTED'
+                return
+
+            else:
+                print 'ERROR'
+                return
 
     def construct_parse_tree(self):
         pass
@@ -314,7 +357,11 @@ if __name__ == "__main__":
 
     #print parser.items
 
-    #print grammar.follow("T")
+    #print grammar.first("+", dict())
 
-    print parser.action_table
-    print parser.goto_table
+    #print parser.items
+    #print parser.action_table
+    #print parser.goto_table
+
+
+    print parser.try_parse(['(','id', '+', 'id', ')', '+', 'id'])
