@@ -36,19 +36,21 @@ class Grammar:
         self.symbols = set([])
         self.terminal_symbols = set([])
         self.rules = self.extract_rules(grammar_string)
-        self.start = start_symbol + "'"
-        self.rules[self.start] = Rule(self.start, [start_symbol])
+        self.start = start_symbol# + "'"
+        #self.rules[self.start] = [Rule(self.start, [start_symbol])]
+        #self.symbols.add(self.start)
         self.first_cache = {}
         self.follow_cache = {}
 
-    def nullable(self, rule):
+    def nullable(self, rules):
 
-        if ('#' in rule.rhs):
-            return True
+        for rule in rules:
+            if ('#' in rule.rhs):
+                return True
 
         return False
 
-    def first(self, symbols, visited):
+    def first(self, symbols, visited=dict()):
         if (not symbols):
             return set([])
 
@@ -57,10 +59,16 @@ class Grammar:
             return self.first_cache[tuple(symbols)]
 
         if (len(symbols) == 1):
+            if (visited.get(symbols[0], False)):
+                return set([])
+
             if (symbols[0] in self.terminal_symbols):
-                self.first_cache[tuple(symbols)] = set([symbols[0]])
+                visited[symbols[0]] = True
+                self.first_cache[tuple(symbols)] = {symbols[0]}
                 return self.first_cache[tuple(symbols)]
+
             elif (symbols[0] in self.symbols):
+                visited[symbols[0]] = True
                 if (not self.rules.has_key(symbols[0])):
                     self.rules[symbols[0]] = []
 
@@ -70,21 +78,9 @@ class Grammar:
                     self.first_cache[tuple(symbols)] = set([])
                     return set([])
 
-                k = 1
                 result = set([])
-                result |= self.first(tuple(set(Y[0].rhs) - set(symbols) - set(visited.keys())), visited)
-
-                for x in Y[0].rhs:
-                    visited[x] = True
-
-                while k < len(Y):
-                    if (self.nullable(Y[k])):
-                        for x in Y[k]:
-                            visited[x] = True
-                        result |= self.first(tuple(set(Y[k].rhs) - set(symbols) - set(visited.keys())), visited)
-                    else:
-                        break
-                    k += 1
+                for y in Y:
+                    result |= self.first(tuple(y.rhs), visited)
 
                 self.first_cache[tuple(symbols)] = result
                 return result
@@ -92,21 +88,45 @@ class Grammar:
             else:
                 return set([])
 
-        visited[symbols[0]] = True
-        result = self.first(tuple(set([symbols[0]]) - set(['#']) - set(visited.keys())), visited)
-        is_nullable = self.nullable(self.rules.get(symbols[0], Rule('', [])))
+        result = set()
+
+        if (not visited.get(symbols[0], False)):
+            result = self.first(tuple([symbols[0]]), visited)
+
+        is_nullable = self.nullable(self.rules.get(symbols[0], [Rule('', [])]))
 
         for i in range(1, len(symbols)):
-            visited[symbols[i]] = True
-            result |= (self.first(tuple(set([symbols[i]]) - set(['#']) - set(visited.keys())), visited))
-            is_nullable = is_nullable and self.nullable(self.rules.get(symbols[i], Rule('', [])))
+            if (not is_nullable): break
+            if (not visited.get(symbols[i], False)):
+                result |= (self.first(tuple([symbols[i]]), visited))
+                is_nullable = is_nullable and self.nullable(self.rules.get(symbols[i], Rule('', [])))
 
         self.first_cache[tuple(symbols)] = result
         return result
 
 
-    def follow(self, symbols):
-        pass
+    def follow(self, symbol, visited=dict()):
+        result = {'$'}
+        visited[symbol] = True
+
+        for nonterminal in self.rules:
+            for rule in self.rules[nonterminal]:
+                if (symbol in rule.rhs):
+                    for i in range(0, len(rule.rhs)-1):
+                        if (rule.rhs[i] == symbol):
+                            tmp = self.first(rule.rhs[i+1:], dict())
+                            if ('#' in tmp):
+                                result |= (tmp - {'#'})
+                                if (not visited.get(rule.lhs, False)):
+                                    tmp = self.follow(rule.lhs)
+                                    result |= tmp
+                            else:
+                                result |= tmp
+                    if (rule.rhs[-1] == symbol):
+                        if (not visited.get(rule.lhs, False)):
+                            result |= self.follow(rule.lhs)
+
+        return result
 
     def extract_rules(self, rules):
         result = {}
@@ -184,11 +204,10 @@ class Parser:
         return J
 
     def get_items(self, grammar):
-
         if (grammar.start not in grammar.rules):
             return set()
 
-        start = (grammar.rules[grammar.start], 0)
+        start = (grammar.rules[grammar.start][0], 0)
         first_set = set()
         first_set.add(start)
         result = [self.closure(first_set, grammar)]
@@ -206,9 +225,6 @@ class Parser:
 
         return result
 
-    def generate_parsing_table(self):
-        pass
-
     def __init__(self, grammar):
 
         self.items = self.get_items(grammar)
@@ -217,6 +233,7 @@ class Parser:
         self.action_table = {}
 
         for i in range(len(self.items)):
+
             for x in grammar.terminal_symbols:
                 found = False
 
@@ -229,12 +246,43 @@ class Parser:
                 if (found):
                     tmp = self.goto(self.items[i], x)
                     for j in range(len(self.items)):
-                        if tmp == self.items[j]:
+                        if (tmp == self.items[j]) and (i != j):
                             #self.action_table.get(i, dict()).get(x, "")
                             if (not self.action_table.has_key(i)):
-                                self.action_table[i] = {}
+                                self.action_table[i] = dict()
 
                             self.action_table[i][x] = "s" + str(j)
+
+            for item, idx in self.items[i]:
+                if item.lhs == grammar.start: continue
+
+                if idx == len(item.rhs):
+                    if (not self.action_table.has_key(i)):
+                        self.action_table[i] = {}
+
+                    tmp = grammar.follow(item.lhs)
+
+                    for a in tmp:
+                        if (grammar.rules.has_key(item.lhs)):
+                            self.action_table[i][a] = "r" + grammar.rules[item.lhs].indexof(item)
+
+                if (grammar.rules[grammar.start][0] == item):
+                    if (not self.action_table.has_key(i)):
+                        self.action_table[i] = {}
+
+                    self.action_table[i]['$'] = 'accept'
+
+            for x in grammar.symbols:
+                if (x in grammar.terminal_symbols): continue
+
+                tmp = self.goto(self.items[i], x)
+
+                for j in range(len(self.items)):
+                    if (tmp == self.items[j]) and (i != j):
+                        if (not self.goto_table.has_key(i)):
+                            self.goto_table[i] = dict()
+
+                        self.goto_table[i][x] = j
 
 
     def construct_parse_tree(self):
@@ -245,6 +293,14 @@ if __name__ == "__main__":
     grammar_string = """
     E -> E + T | T
     T -> T * F | F
+    F -> ( E ) | id
+    """
+
+    grammar_string_2 = """
+    E -> T E'
+    E' -> + T E' | #
+    T -> F T'
+    T' -> * F T' | #
     F -> ( E ) | id
     """
     grammar = Grammar(grammar_string, 'E')
@@ -258,4 +314,7 @@ if __name__ == "__main__":
 
     #print parser.items
 
-    print grammar.first(['F'], dict())
+    #print grammar.follow("T")
+
+    print parser.action_table
+    print parser.goto_table
